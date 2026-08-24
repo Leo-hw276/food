@@ -1,0 +1,13 @@
+{
+  "name": "meiwei-dingcan",
+  "version": "1.0.0",
+  "description": "美味订餐平台：用户端 / 骑手端 / 管理员端",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "qrcode": "^1.5.4"
+  }
+}

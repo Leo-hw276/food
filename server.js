@@ -176,7 +176,7 @@ app.post('/api/register', (req, res) => {
     id: db.users.length + 1,
     phone,
     name,
-    password, // 实际项目应使用哈希
+    password,
     role: 'user',
     createdAt: new Date().toISOString()
   };
@@ -201,7 +201,6 @@ app.post('/api/login', (req, res) => {
 });
 
 // ===================== 用户端接口 =====================
-// 下单
 app.post('/api/orders', auth, async (req, res) => {
   const { type, content, scheduledTime, estimatedFee } = req.body || {};
   if (!['door', 'delivery'].includes(type)) return res.status(400).json({ error: '订单类型无效' });
@@ -326,6 +325,26 @@ app.post('/api/admin/set-role', auth, authRole('admin'), (req, res) => {
   res.json({ user: publicUser(user) });
 });
 
+// ===================== 数据导入导出（管理员） =====================
+// 导出所有数据
+app.get('/api/admin/export', auth, authRole('admin'), (req, res) => {
+  res.json(db);
+});
+
+// 导入所有数据（覆盖）
+app.post('/api/admin/import', auth, authRole('admin'), (req, res) => {
+  const imported = req.body;
+  if (!imported || typeof imported !== 'object' || !Array.isArray(imported.users) || !Array.isArray(imported.orders)) {
+    return res.status(400).json({ error: '导入数据格式无效，需要包含 users 和 orders 数组' });
+  }
+  db = imported;
+  if (!db.counters) db.counters = { order: 0 };
+  if (!db.config) db.config = { serviceFee: 1.5 };
+  saveDB();
+  res.json({ ok: true, message: '数据导入成功，共 ' + db.users.length + ' 用户，' + db.orders.length + ' 订单' });
+});
+
+// 兜底
 app.use('/api', (req, res) => res.status(404).json({ error: '接口不存在' }));
 
 app.listen(PORT, () => {

@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>美味订餐 · 骑手端</title>
+  <title>极速快运 · 骑手端</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <header class="header">
-  <div class="logo">🛵 骑手端</div>
+  <div class="logo">🚚 骑手端</div>
   <nav class="nav">
     <a href="index.html">用户端</a>
     <a href="rider.html" class="active">骑手端</a>
@@ -26,6 +26,10 @@
       <div class="field">
         <label>手机号</label>
         <input type="tel" id="loginPhone" placeholder="请输入已注册的手机号" maxlength="11">
+      </div>
+      <div class="field">
+        <label>密码</label>
+        <input type="password" id="loginPassword" placeholder="请输入密码" minlength="6">
       </div>
       <button type="submit" class="btn btn-primary btn-block">登录</button>
       <div class="auth-tip">
@@ -138,9 +142,11 @@ function beep() {
 async function handleLogin(e) {
   e.preventDefault();
   var phone = document.getElementById('loginPhone').value.trim();
+  var password = document.getElementById('loginPassword').value;
   if (!/^1\d{10}$/.test(phone)) return toast('请输入正确的 11 位手机号');
+  if (!password || password.length < 6) return toast('请输入至少 6 位的密码');
   try {
-    var data = await api('/api/login', { method: 'POST', body: JSON.stringify({ phone: phone }) });
+    var data = await api('/api/login', { method: 'POST', body: JSON.stringify({ phone: phone, password: password }) });
     if (data.user.role !== 'rider' && data.user.role !== 'admin') {
       toast('该账号不是骑手，请先注册普通账户并联系管理员开通骑手资格', true);
       return;
@@ -214,7 +220,7 @@ async function refreshOrders(showToast) {
       toast('🔔 收到新派送订单，请及时处理！', false);
       try {
         if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification('🍜 新派送订单', { body: '有新订单待处理，请查看骑手端' });
+          new Notification('🚚 新派送订单', { body: '有新订单待处理，请查看骑手端' });
         }
       } catch (e) {}
     }

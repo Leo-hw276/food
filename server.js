@@ -1,5 +1,5 @@
 /**
- * 美味订餐平台 - 后端服务
+ * 极速快运平台 - 后端服务
  * 用户端 / 骑手端 / 管理员端
  * 启动：npm install && npm start
  */
@@ -25,10 +25,10 @@ function clone(obj) {
 }
 
 const DEFAULT_DB = {
-  users: [], // { id, phone, name, role: 'user'|'rider', createdAt }
+  users: [], // { id, phone, name, password, role: 'user'|'rider', createdAt }
   orders: [], // { id, orderNo, type, content, scheduledTime, estimatedFee, serviceFee, total, pickupCode, status, phone, name, createdAt }
   counters: { order: 0 },
-  config: { serviceFee: 1.5 } // 服务费，仅管理员可修改
+  config: { serviceFee: 1.5 }
 };
 
 function loadDB() {
@@ -106,7 +106,7 @@ function orderToText(o) {
   const typeText = o.type === 'door' ? '上门服务' : '外卖配送';
   const timeLabel = o.type === 'door' ? '上门时间' : '送达时间';
   const lines = [
-    '【订餐订单详情】',
+    '【极速快运订单详情】',
     '订单号：' + o.orderNo,
     '订单类型：' + typeText,
     '内容：' + o.content,
@@ -162,28 +162,40 @@ app.get('/api/config', (req, res) => {
   res.json({ serviceFee: db.config.serviceFee });
 });
 
-// 注册：手机号 + 名称
+// 注册：手机号 + 名称 + 密码
 app.post('/api/register', (req, res) => {
   const phone = String((req.body && req.body.phone) || '').trim();
   const name = String((req.body && req.body.name) || '').trim();
+  const password = String((req.body && req.body.password) || '').trim();
   if (!/^1\d{10}$/.test(phone)) return res.status(400).json({ error: '请输入正确的 11 位手机号' });
   if (!name) return res.status(400).json({ error: '请输入名称' });
+  if (!password || password.length < 6) return res.status(400).json({ error: '密码至少 6 位' });
   if (phone === ADMIN_PHONE) return res.status(400).json({ error: '该手机号为系统管理员账号，无法注册' });
   if (db.users.some((u) => u.phone === phone)) return res.status(400).json({ error: '该手机号已注册，请直接登录' });
-  const user = { id: db.users.length + 1, phone, name, role: 'user', createdAt: new Date().toISOString() };
+  const user = {
+    id: db.users.length + 1,
+    phone,
+    name,
+    password, // 实际项目应使用哈希
+    role: 'user',
+    createdAt: new Date().toISOString()
+  };
   db.users.push(user);
   saveDB();
   const token = createSession(user.phone, user.role, user.name);
   res.json({ token, user: publicUser(user) });
 });
 
-// 登录：仅手机号，无需验证码
+// 登录：手机号 + 密码
 app.post('/api/login', (req, res) => {
   const phone = String((req.body && req.body.phone) || '').trim();
+  const password = String((req.body && req.body.password) || '').trim();
   if (!phone) return res.status(400).json({ error: '请输入手机号' });
+  if (!password) return res.status(400).json({ error: '请输入密码' });
   if (phone === ADMIN_PHONE) return res.status(400).json({ error: '管理员请到管理员端登录' });
   const user = db.users.find((u) => u.phone === phone);
   if (!user) return res.status(400).json({ error: '该手机号未注册，请先注册' });
+  if (user.password !== password) return res.status(400).json({ error: '密码错误' });
   const token = createSession(user.phone, user.role, user.name);
   res.json({ token, user: publicUser(user) });
 });
@@ -248,7 +260,7 @@ app.get('/api/orders/:id', auth, (req, res) => {
   res.json({ order: publicOrder(order) });
 });
 
-// 订单二维码（扫出来为订单全部内容，中文）
+// 订单二维码
 app.get('/api/orders/:id/qr', auth, async (req, res) => {
   const order = db.orders.find((o) => o.id === req.params.id);
   if (!order) return res.status(404).json({ error: '订单不存在' });
@@ -262,12 +274,10 @@ app.get('/api/orders/:id/qr', auth, async (req, res) => {
 });
 
 // ===================== 骑手端接口 =====================
-// 骑手订单列表（派送通知轮询）
 app.get('/api/rider/orders', auth, authRole('rider', 'admin'), (req, res) => {
   res.json({ orders: db.orders.map(publicOrder) });
 });
 
-// 骑手更新订单状态
 app.post('/api/rider/orders/:id/status', auth, authRole('rider', 'admin'), (req, res) => {
   const order = db.orders.find((o) => o.id === req.params.id);
   if (!order) return res.status(404).json({ error: '订单不存在' });
@@ -279,7 +289,6 @@ app.post('/api/rider/orders/:id/status', auth, authRole('rider', 'admin'), (req,
 });
 
 // ===================== 管理员端接口 =====================
-// 管理员登录（内置账号）
 app.post('/api/admin/login', (req, res) => {
   const phone = String((req.body && req.body.phone) || '').trim();
   const password = String((req.body && req.body.password) || '');
@@ -290,7 +299,6 @@ app.post('/api/admin/login', (req, res) => {
   res.json({ token, user: { phone: ADMIN_PHONE, name: '管理员', role: 'admin', roleText: '管理员' } });
 });
 
-// 修改服务费
 app.put('/api/admin/config', auth, authRole('admin'), (req, res) => {
   const fee = Number((req.body || {}).serviceFee);
   if (!Number.isFinite(fee) || fee < 0) return res.status(400).json({ error: '服务费金额无效' });
@@ -299,17 +307,14 @@ app.put('/api/admin/config', auth, authRole('admin'), (req, res) => {
   res.json({ serviceFee: db.config.serviceFee });
 });
 
-// 所有订单
 app.get('/api/admin/orders', auth, authRole('admin'), (req, res) => {
   res.json({ orders: db.orders.map(publicOrder) });
 });
 
-// 所有用户
 app.get('/api/admin/users', auth, authRole('admin'), (req, res) => {
   res.json({ users: db.users.map(publicUser) });
 });
 
-// 设置 / 取消骑手
 app.post('/api/admin/set-role', auth, authRole('admin'), (req, res) => {
   const phone = String((req.body || {}).phone || '').trim();
   const role = (req.body || {}).role;
@@ -321,12 +326,11 @@ app.post('/api/admin/set-role', auth, authRole('admin'), (req, res) => {
   res.json({ user: publicUser(user) });
 });
 
-// 兜底
 app.use('/api', (req, res) => res.status(404).json({ error: '接口不存在' }));
 
 app.listen(PORT, () => {
   console.log('============================================');
-  console.log('  美味订餐平台已启动');
+  console.log('  极速快运平台已启动');
   console.log('  用户端   ：http://localhost:' + PORT + '/');
   console.log('  骑手端   ：http://localhost:' + PORT + '/rider.html');
   console.log('  管理员端 ：http://localhost:' + PORT + '/admin.html');
